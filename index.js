@@ -26,7 +26,12 @@ const LIMITER = RateLimit(CONCURRENCY);
 let feedsProcessed = 0;
 
 async function main() {
-    await login();
+    try {
+        await login();
+    } catch (error) {
+        console.error("Failed to login to ClassDojo, double check your .env file", error);
+        process.exit();
+    }
 
     try {
         await processFeed(FEED_URL);
@@ -36,6 +41,15 @@ async function main() {
 }
 
 async function login() {
+    checkEnv("DOJO_EMAIL");
+    checkEnv("DOJO_PASSWORD");
+
+    function checkEnv(variable) {
+        if (!process.env[variable]) {
+            throw new Error(`${variable} not set in the .env file. Please follow the instructions on the README of the project.`);
+        }
+    }
+
     return await axios.post(LOGIN_URL, {
         login: process.env.DOJO_EMAIL,
         password: process.env.DOJO_PASSWORD,
@@ -57,10 +71,15 @@ async function processFeed(url) {
     for (const item of feed._items) {
         const time = item.time;
         const date = moment(time).format(DATE_FORMAT);
-        await createDirectory(Path.resolve(__dirname, IMAGE_DIR, date));
-
+        
         const contents = item.contents;
         const attachments = contents.attachments;
+
+        if (attachments === undefined || attachments.length == 0) {
+            //No files to download
+            continue;
+        }
+        await createDirectory(Path.resolve(__dirname, IMAGE_DIR, date));
 
         for (const attachment of attachments) {
             const url = attachment.path;
